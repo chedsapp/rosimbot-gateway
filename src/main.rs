@@ -8,7 +8,7 @@ use twilight_model::gateway::{
     presence::{ActivityType, MinimalActivity, Status},
 };
 
-const FORWARDED: &[&str] = &[];
+const FORWARDED: &[&str] = &["MESSAGE_REACTION_ADD"];
 const FATAL_CLOSE_CODES: &[u16] = &[4004, 4010, 4011, 4012, 4013, 4014];
 
 #[derive(Deserialize)]
@@ -55,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
         secret: env::var("GATEWAY_SECRET")?,
     });
 
-    let intents = Intents::empty();
+    let intents = Intents::GUILD_MESSAGE_REACTIONS;
 
     let presence = UpdatePresencePayload::new(
         vec![

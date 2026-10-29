@@ -43,6 +43,22 @@ if [[ ! -f "$ENV_FILE" || "${1:-}" == "--env" ]]; then
   grep -q '^NO_COLOR=' "$ENV_FILE" 2>/dev/null || echo 'NO_COLOR=1' | sudo tee -a "$ENV_FILE" >/dev/null
 fi
 
+# NixOS manages /etc/systemd/system itself, so the unit lives in configuration.nix.
+if [[ -e /etc/NIXOS ]]; then
+  if ! systemctl cat "$NAME" >/dev/null 2>&1; then
+    echo "NixOS detected: add the systemd.services.$NAME block to configuration.nix," >&2
+    echo "run 'sudo nixos-rebuild switch', then re-run this script." >&2
+    exit 1
+  fi
+  echo "==> Restarting service"
+  sudo systemctl restart "$NAME"
+  sleep 2
+  sudo systemctl --no-pager --lines=5 status "$NAME" || true
+  echo
+  echo "Done. Follow logs with: journalctl -u $NAME -f"
+  exit 0
+fi
+
 echo "==> Writing $UNIT"
 sudo tee "$UNIT" >/dev/null <<EOF
 [Unit]
