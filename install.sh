@@ -27,37 +27,38 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   exit 0
 fi
 
-echo "==> Building release binary"
-cargo build --release
-
-echo "==> Installing binary to $BIN"
-sudo install -m 755 "target/release/$NAME" "$BIN"
-
-if [[ ! -f "$ENV_FILE" || "${1:-}" == "--env" ]]; then
-  if [[ ! -f .env ]]; then
-    echo "No .env found. Copy .env.example to .env, fill it in, and re-run." >&2
-    exit 1
+install_env() {
+  if [[ ! -f "$ENV_FILE" || "${1:-}" == "--env" ]]; then
+    if [[ ! -f .env ]]; then
+      echo "No .env found. Copy .env.example to .env, fill it in, and re-run." >&2
+      exit 1
+    fi
+    echo "==> Installing secrets to $ENV_FILE"
+    sudo install -m 600 .env "$ENV_FILE"
+    grep -q '^NO_COLOR=' "$ENV_FILE" 2>/dev/null || echo 'NO_COLOR=1' | sudo tee -a "$ENV_FILE" >/dev/null
   fi
-  echo "==> Installing secrets to $ENV_FILE"
-  sudo install -m 600 .env "$ENV_FILE"
-  grep -q '^NO_COLOR=' "$ENV_FILE" 2>/dev/null || echo 'NO_COLOR=1' | sudo tee -a "$ENV_FILE" >/dev/null
-fi
+}
 
-# NixOS manages /etc/systemd/system itself, so the unit lives in configuration.nix.
+# NixOS: Nix builds the package and owns the unit (see package.nix and the
+# systemd.services block in configuration.nix), so just sync secrets and rebuild.
 if [[ -e /etc/NIXOS ]]; then
-  if ! systemctl cat "$NAME" >/dev/null 2>&1; then
-    echo "NixOS detected: add the systemd.services.$NAME block to configuration.nix," >&2
-    echo "run 'sudo nixos-rebuild switch', then re-run this script." >&2
-    exit 1
-  fi
-  echo "==> Restarting service"
-  sudo systemctl restart "$NAME"
-  sleep 2
+  install_env "${1:-}"
+  echo "==> NixOS detected; running nixos-rebuild switch"
+  sudo nixos-rebuild switch
   sudo systemctl --no-pager --lines=5 status "$NAME" || true
   echo
   echo "Done. Follow logs with: journalctl -u $NAME -f"
   exit 0
 fi
+
+echo "==> Building release binary"
+cargo build --release
+
+echo "==> Installing binary to $BIN"
+sudo install -D -m 755 "target/release/$NAME" "$BIN"
+
+install_env "${1:-}"
+
 
 echo "==> Writing $UNIT"
 sudo tee "$UNIT" >/dev/null <<EOF
